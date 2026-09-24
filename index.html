@@ -9,6 +9,7 @@
       margin: 0;
       overflow: hidden;
       font-family: Arial, sans-serif;
+      background-color: #000;
     }
     #container {
       width: 100vw;
@@ -19,18 +20,19 @@
     /* Start Button */
     #startButton {
       position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 100;
-      padding: 14px 28px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 300;
+      padding: 16px 32px;
       background: #ff2a5f;
       color: white;
       border: none;
-      border-radius: 8px;
-      font-size: 16px;
+      border-radius: 30px;
+      font-size: 18px;
       font-weight: bold;
       cursor: pointer;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 15px rgba(255, 42, 95, 0.4);
     }
 
     /* Loading Screen Overlay */
@@ -52,9 +54,9 @@
     .progress-bar-container {
       width: 70%;
       max-width: 300px;
-      height: 12px;
+      height: 10px;
       background: #333;
-      border-radius: 6px;
+      border-radius: 5px;
       overflow: hidden;
       margin-top: 15px;
     }
@@ -63,7 +65,7 @@
       width: 0%;
       height: 100%;
       background: #ff2a5f;
-      transition: width 0.2s ease;
+      transition: width 0.1s ease;
     }
 
     /* Interactive AR Control Menu */
@@ -78,15 +80,14 @@
       backdrop-filter: blur(8px);
       padding: 12px 20px;
       border-radius: 30px;
-      display: flex;
       gap: 12px;
       align-items: center;
       box-shadow: 0 4px 15px rgba(0,0,0,0.4);
     }
 
     .menu-btn {
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       border: 2px solid #fff;
       cursor: pointer;
@@ -159,7 +160,7 @@
     }
 
     // 2. Setup Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -186,54 +187,54 @@
     const progressText = document.querySelector('#progressText');
     const arMenu = document.querySelector('#arMenu');
 
-    // 5. Load model with progress bar handling
-    loader.load(
-      './assets/thar.glb?v=7', 
-      (gltf) => {
-        tharModel = gltf.scene;
+    // 5. Function to load model
+    function loadModel() {
+      return new Promise((resolve, reject) => {
+        loader.load(
+          './assets/thar.glb?v=8', 
+          (gltf) => {
+            tharModel = gltf.scene;
 
-        // Auto-center geometry
-        const box = new THREE.Box3().setFromObject(tharModel);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
+            // Auto-center geometry
+            const box = new THREE.Box3().setFromObject(tharModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
 
-        tharModel.position.x += (tharModel.position.x - center.x);
-        tharModel.position.y += (tharModel.position.y - center.y);
-        tharModel.position.z += (tharModel.position.z - center.z);
+            tharModel.position.x += (tharModel.position.x - center.x);
+            tharModel.position.y += (tharModel.position.y - center.y);
+            tharModel.position.z += (tharModel.position.z - center.z);
 
-        // Auto-scale model
-        const maxDim = Math.max(size.x, size.y, size.z);
-        if (maxDim > 0) {
-          const scale = 1.0 / maxDim;
-          tharModel.scale.set(scale, scale, scale);
-        }
+            // Auto-scale model
+            const maxDim = Math.max(size.x, size.y, size.z);
+            if (maxDim > 0) {
+              const scale = 1.0 / maxDim;
+              tharModel.scale.set(scale, scale, scale);
+            }
 
-        tharModel.rotation.x = Math.PI / 2;
-        anchor.group.add(tharModel);
-
-        // Hide loading screen and display menu overlay
-        loadingScreen.style.display = 'none';
-        arMenu.style.display = 'flex';
-      },
-      (progress) => {
-        if (progress.total > 0) {
-          const percent = Math.round((progress.loaded / progress.total) * 100);
-          progressBar.style.width = percent + '%';
-          progressText.innerText = percent + '%';
-        }
-      },
-      (error) => {
-        console.error('Error loading model:', error);
-        progressText.innerText = 'Failed to load 3D model.';
-      }
-    );
+            tharModel.rotation.x = Math.PI / 2;
+            anchor.group.add(tharModel);
+            resolve();
+          },
+          (progress) => {
+            if (progress.total > 0) {
+              const percent = Math.min(Math.round((progress.loaded / progress.total) * 100), 100);
+              progressBar.style.width = percent + '%';
+              progressText.innerText = percent + '%';
+            }
+          },
+          (error) => {
+            console.error('Error loading model:', error);
+            reject(error);
+          }
+        );
+      });
+    }
 
     // 6. Color customization helpers
     function setModelColor(colorHex) {
       if (!tharModel) return;
       tharModel.traverse((node) => {
         if (node.isMesh && node.material) {
-          // Adjust paint material color
           node.material.color.setHex(colorHex);
         }
       });
@@ -249,19 +250,33 @@
       rotateBtn.innerText = isAutoRotating ? 'Stop Rotation' : 'Auto-Rotate';
     });
 
-    // 7. Start Engine
+    // 7. Start Engine Sequence
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
-      loadingScreen.style.display = 'flex'; // Show loading screen when user launches AR
+      loadingScreen.style.display = 'flex';
       
-      await mindarThree.start();
+      try {
+        // Start camera stream first
+        await mindarThree.start();
+        
+        // Load model asset
+        await loadModel();
 
-      renderer.setAnimationLoop(() => {
-        if (tharModel && isAutoRotating) {
-          tharModel.rotation.z += 0.01;
-        }
-        renderer.render(scene, camera);
-      });
+        // Hide overlay and show menu
+        loadingScreen.style.display = 'none';
+        arMenu.style.display = 'flex';
+
+        renderer.setAnimationLoop(() => {
+          if (tharModel && isAutoRotating) {
+            tharModel.rotation.z += 0.01;
+          }
+          renderer.render(scene, camera);
+        });
+
+      } catch (err) {
+        console.error('AR Initialization Failed:', err);
+        progressText.innerText = 'Failed to start AR Camera or Load Asset.';
+      }
     });
   </script>
 </body>
