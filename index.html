@@ -80,7 +80,7 @@
     anchor.group.add(plane);
 
     const loader = new GLTFLoader();
-    loader.load('./assets/model.glb', (gltf) => {
+    loader.load('./assets/thar.glb', (gltf) => {
       const model = gltf.scene;
       model.scale.set(0.2, 0.2, 0.2); // Adjust scale to fit your target
       model.rotation.x = Math.PI / 2; // Adjust orientation
