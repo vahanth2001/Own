@@ -3,36 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MindAR + Three.js WebAR App</title>
+  <title>My WebAR App</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
     }
-    /* Full-screen AR container */
     #container {
       width: 100vw;
       height: 100vh;
       position: relative;
-      overflow: hidden;
     }
-    /* Start button overlay */
     #startButton {
       position: absolute;
       top: 20px;
       left: 20px;
-      z-index: 10;
+      z-index: 100;
       padding: 12px 24px;
-      background: #007bff;
+      background: #ff2a5f;
       color: white;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
+      font-size: 16px;
       font-weight: bold;
       cursor: pointer;
     }
   </style>
 
-  <!-- ES Module Import Maps for Three.js & MindAR -->
+  <!-- ES Import Map for Libraries -->
   <script type="importmap">
     {
       "imports": {
@@ -44,55 +42,61 @@
   </script>
 </head>
 <body>
-  <button id="startButton">Start AR</button>
+  <button id="startButton">Launch AR Camera</button>
   <div id="container"></div>
 
   <script type="module">
     import * as THREE from 'three';
     import { MindARThree } from 'mindar-image-three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    // 1. Initialize MindARThree instance
+    // 1. Initialize MindAR
     const mindarThree = new MindARThree({
       container: document.querySelector('#container'),
-      imageTargetSrc: './card.mind', // Path to your compiled target file
+      imageTargetSrc: './targets.mind', // Path to your targets.mind file
     });
 
     const { renderer, scene, camera } = mindarThree;
 
-    // 2. Add an Anchor for target index 0 (first target image)
+    // 2. Add Light Source
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(1, 2, 3);
+    scene.add(directionalLight);
+
+    // 3. Set Up Target Anchor (Index 0 = First image in your targets.mind)
     const anchor = mindarThree.addAnchor(0);
 
-    // 3. Create Three.js 3D Mesh
-    const geometry = new THREE.PlaneGeometry(1, 0.55);
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0x00ffff, 
+    // --- OPTION A: Simple Cyan Plane (Fallback placeholder) ---
+    const geometry = new THREE.PlaneGeometry(1, 0.7);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0x00e5ff, 
       transparent: true, 
-      opacity: 0.7 
+      opacity: 0.8 
     });
     const plane = new THREE.Mesh(geometry, material);
-
-    // Attach mesh to the MindAR anchor group
     anchor.group.add(plane);
 
-    // Optional: Target Visibility Event Listeners
-    anchor.onTargetFound = () => {
-      console.log("Target found");
-    };
-    anchor.onTargetLost = () => {
-      console.log("Target lost");
-    };
+    const loader = new GLTFLoader();
+    loader.load('./assets/model.glb', (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(0.2, 0.2, 0.2); // Adjust scale to fit your target
+      model.rotation.x = Math.PI / 2; // Adjust orientation
+      anchor.group.add(model);
+    });
 
-    // 4. Start AR Session on click
-    const startButton = document.querySelector('#startButton');
-    startButton.addEventListener('click', async () => {
-      startButton.style.display = 'none'; // Hide button after clicking
+    // 4. Start Engine on User Click
+    const startBtn = document.querySelector('#startButton');
+    startBtn.addEventListener('click', async () => {
+      startBtn.style.display = 'none';
       
       await mindarThree.start();
-      
-      // Three.js Render Loop
+
+      // Render loop
       renderer.setAnimationLoop(() => {
-        // Continuous object animation while tracked
-        plane.rotation.z += 0.01;
+        plane.rotation.z += 0.01; // Continuous animation
         renderer.render(scene, camera);
       });
     });
