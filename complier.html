@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Offline MindAR Compiler</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <h2>Local MindAR Compiler</h2>
+  <input type="file" id="fileInput" accept="image/*" multiple />
+  <button id="compileBtn">Compile Target</button>
+  <p id="status"></p>
+
+  <script type="module">
+    import { Compiler } from 'mindar-image-three';
+
+    const fileInput = document.getElementById('fileInput');
+    const compileBtn = document.getElementById('compileBtn');
+    const status = document.getElementById('status');
+
+    compileBtn.addEventListener('click', async () => {
+      const files = fileInput.files;
+      if (files.length === 0) {
+        alert('Please select at least one image file.');
+        return;
+      }
+
+      status.innerText = 'Loading images...';
+      
+      // Load selected images as HTML Image Elements
+      const images = await Promise.all(
+        Array.from(files).map((file) => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = URL.createObjectURL(file);
+          });
+        })
+      );
+
+      status.innerText = 'Compiling feature points (this may take a few seconds)...';
+
+      // 1. Initialize MindAR Compiler instance
+      const compiler = new Compiler();
+
+      // 2. Process image feature points
+      await compiler.compileImageTargets(images, (progress) => {
+        status.innerText = `Compiling: ${progress.toFixed(1)}%`;
+      });
+
+      // 3. Export to binary array buffer
+      const exportedBuffer = await compiler.exportData();
+
+      // 4. Trigger direct download for targets.mind
+      const blob = new Blob([exportedBuffer], { type: 'application/octet-stream' });
+      const downloadLink = document.createElement('a');
+      downloadLink.href = URL.createObjectURL(blob);
+      downloadLink.download = 'targets.mind';
+      downloadLink.click();
+
+      status.innerText = 'Compilation complete! Download started.';
+    });
+  </script>
+</body>
+</html>
