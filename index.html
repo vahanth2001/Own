@@ -8,13 +8,15 @@
     body {
       margin: 0;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
     }
     #container {
       width: 100vw;
       height: 100vh;
       position: relative;
     }
+
+    /* Start Button */
     #startButton {
       position: absolute;
       top: 20px;
@@ -30,9 +32,83 @@
       cursor: pointer;
       box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
+
+    /* Loading Screen Overlay */
+    #loadingScreen {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 200;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+    }
+
+    .progress-bar-container {
+      width: 70%;
+      max-width: 300px;
+      height: 12px;
+      background: #333;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 15px;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: #ff2a5f;
+      transition: width 0.2s ease;
+    }
+
+    /* Interactive AR Control Menu */
+    #arMenu {
+      display: none;
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 150;
+      background: rgba(20, 20, 20, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 12px 20px;
+      border-radius: 30px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+
+    .menu-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      cursor: pointer;
+    }
+
+    .btn-red { background: #d32f2f; }
+    .btn-black { background: #111111; }
+    .btn-white { background: #ffffff; }
+
+    .action-btn {
+      background: #ff2a5f;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+    }
   </style>
 
-  <!-- ES Import Map for Libraries -->
+  <!-- ES Import Map -->
   <script type="importmap">
     {
       "imports": {
@@ -47,11 +123,28 @@
   <button id="startButton">Launch AR Camera</button>
   <div id="container"></div>
 
+  <!-- Loading Screen Element -->
+  <div id="loadingScreen">
+    <div style="font-size: 18px; font-weight: bold;">Loading 3D Thar...</div>
+    <div class="progress-bar-container">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+    <div id="progressText" style="margin-top: 8px; font-size: 12px; color: #aaa;">0%</div>
+  </div>
+
+  <!-- AR Control Menu -->
+  <div id="arMenu">
+    <div class="menu-btn btn-red" id="colorRed" title="Red"></div>
+    <div class="menu-btn btn-black" id="colorBlack" title="Black"></div>
+    <div class="menu-btn btn-white" id="colorWhite" title="White"></div>
+    <button class="action-btn" id="rotateBtn">Auto-Rotate</button>
+  </div>
+
   <script type="module">
     import * as THREE from 'three';
     import { MindARThree } from 'mindar-image-three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'; // 1. Import DRACOLoader
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
     // 1. Initialize MindAR Engine
     const mindarThree = new MindARThree({
@@ -61,7 +154,6 @@
 
     const { renderer, scene, camera } = mindarThree;
 
-    // Suppress Three.js color space warning for cleaner console
     if (renderer) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     }
@@ -77,71 +169,96 @@
     // 3. Set Up Target Anchor (Index 0)
     const anchor = mindarThree.addAnchor(0);
 
-    // --- FALLBACK RED CUBE HELPER ---
-    const testCubeGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-    const testCubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    const testCube = new THREE.Mesh(testCubeGeometry, testCubeMaterial);
-    testCube.position.set(0, 0, 0.1);
-    anchor.group.add(testCube);
+    let tharModel = null;
+    let isAutoRotating = false;
 
     // 4. Configure Draco Decoder & GLTF Loader
-    const dracoLoader = new DRACOLoader(); // 2. Instantiate DRACOLoader
-    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); // Set decoder CDN path
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 
     const loader = new GLTFLoader();
-    loader.setDRACOLoader(dracoLoader); // 3. Attach DRACOLoader to GLTFLoader
+    loader.setDRACOLoader(dracoLoader);
 
-    // 5. Load & Auto-Fit thar.glb
+    // UI Elements
+    const startBtn = document.querySelector('#startButton');
+    const loadingScreen = document.querySelector('#loadingScreen');
+    const progressBar = document.querySelector('#progressBar');
+    const progressText = document.querySelector('#progressText');
+    const arMenu = document.querySelector('#arMenu');
+
+    // 5. Load model with progress bar handling
     loader.load(
-      './assets/thar.glb?v=5', 
+      './assets/thar.glb?v=7', 
       (gltf) => {
-        const model = gltf.scene;
+        tharModel = gltf.scene;
 
         // Auto-center geometry
-        const box = new THREE.Box3().setFromObject(model);
+        const box = new THREE.Box3().setFromObject(tharModel);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
 
-        model.position.x += (model.position.x - center.x);
-        model.position.y += (model.position.y - center.y);
-        model.position.z += (model.position.z - center.z);
+        tharModel.position.x += (tharModel.position.x - center.x);
+        tharModel.position.y += (tharModel.position.y - center.y);
+        tharModel.position.z += (tharModel.position.z - center.z);
 
         // Auto-scale model
         const maxDim = Math.max(size.x, size.y, size.z);
         if (maxDim > 0) {
           const scale = 1.0 / maxDim;
-          model.scale.set(scale, scale, scale);
+          tharModel.scale.set(scale, scale, scale);
         }
 
-        model.rotation.x = Math.PI / 2; // Flat on physical image
+        tharModel.rotation.x = Math.PI / 2;
+        anchor.group.add(tharModel);
 
-        // Hide fallback cube once 3D model is ready
-        anchor.group.remove(testCube);
-        anchor.group.add(model);
-        
-        console.log('Thar GLB decoded and loaded successfully!');
+        // Hide loading screen and display menu overlay
+        loadingScreen.style.display = 'none';
+        arMenu.style.display = 'flex';
       },
       (progress) => {
         if (progress.total > 0) {
-          console.log(`Loading GLB: ${(progress.loaded / progress.total * 100).toFixed(0)}%`);
+          const percent = Math.round((progress.loaded / progress.total) * 100);
+          progressBar.style.width = percent + '%';
+          progressText.innerText = percent + '%';
         }
       },
       (error) => {
-        console.error('Error loading thar.glb:', error);
+        console.error('Error loading model:', error);
+        progressText.innerText = 'Failed to load 3D model.';
       }
     );
 
-    // 6. Trigger Camera Engine on User Click
-    const startBtn = document.querySelector('#startButton');
+    // 6. Color customization helpers
+    function setModelColor(colorHex) {
+      if (!tharModel) return;
+      tharModel.traverse((node) => {
+        if (node.isMesh && node.material) {
+          // Adjust paint material color
+          node.material.color.setHex(colorHex);
+        }
+      });
+    }
+
+    document.querySelector('#colorRed').addEventListener('click', () => setModelColor(0xd32f2f));
+    document.querySelector('#colorBlack').addEventListener('click', () => setModelColor(0x111111));
+    document.querySelector('#colorWhite').addEventListener('click', () => setModelColor(0xffffff));
+
+    const rotateBtn = document.querySelector('#rotateBtn');
+    rotateBtn.addEventListener('click', () => {
+      isAutoRotating = !isAutoRotating;
+      rotateBtn.innerText = isAutoRotating ? 'Stop Rotation' : 'Auto-Rotate';
+    });
+
+    // 7. Start Engine
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
+      loadingScreen.style.display = 'flex'; // Show loading screen when user launches AR
       
       await mindarThree.start();
 
       renderer.setAnimationLoop(() => {
-        if (testCube.parent) {
-          testCube.rotation.x += 0.01;
-          testCube.rotation.y += 0.01;
+        if (tharModel && isAutoRotating) {
+          tharModel.rotation.z += 0.01;
         }
         renderer.render(scene, camera);
       });
