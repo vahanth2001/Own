@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My WebAR App</title>
+  <title>Thar WebAR App</title>
   <style>
     body {
       margin: 0;
@@ -53,50 +53,53 @@
     // 1. Initialize MindAR
     const mindarThree = new MindARThree({
       container: document.querySelector('#container'),
-      imageTargetSrc: './targets.mind', // Path to your targets.mind file
+      imageTargetSrc: './targets.mind',
     });
 
     const { renderer, scene, camera } = mindarThree;
 
-    // 2. Add Light Source
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+    // 2. Add Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
 
-    // 3. Set Up Target Anchor (Index 0 = First image in your targets.mind)
+    // 3. Set Up Target Anchor
     const anchor = mindarThree.addAnchor(0);
 
-    // --- OPTION A: Simple Cyan Plane (Fallback placeholder) ---
-    const geometry = new THREE.PlaneGeometry(1, 0.7);
-    const material = new THREE.MeshStandardMaterial({ 
-      color: 0x00e5ff, 
-      transparent: true, 
-      opacity: 0.8 
-    });
-    const plane = new THREE.Mesh(geometry, material);
-    anchor.group.add(plane);
-
+    // 4. Load your thar.glb model
     const loader = new GLTFLoader();
-    loader.load('./assets/thar.glb', (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(0.2, 0.2, 0.2); // Adjust scale to fit your target
-      model.rotation.x = Math.PI / 2; // Adjust orientation
-      anchor.group.add(model);
-    });
+    
+    loader.load(
+      './thar.glb', 
+      (gltf) => {
+        const model = gltf.scene;
+        
+        // Adjust scale and orientation if needed
+        model.scale.set(0.2, 0.2, 0.2); 
+        model.rotation.x = Math.PI / 2; 
 
-    // 4. Start Engine on User Click
+        anchor.group.add(model);
+        console.log('Thar GLB loaded successfully!');
+      },
+      (progress) => {
+        console.log(`Loading GLB: ${(progress.loaded / progress.total * 100).toFixed(0)}%`);
+      },
+      (error) => {
+        console.error('Error loading thar.glb model:', error);
+      }
+    );
+
+    // 5. Start Engine on User Click
     const startBtn = document.querySelector('#startButton');
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
       
       await mindarThree.start();
 
-      // Render loop
       renderer.setAnimationLoop(() => {
-        plane.rotation.z += 0.01; // Continuous animation
         renderer.render(scene, camera);
       });
     });
