@@ -8,6 +8,7 @@
     body {
       margin: 0;
       overflow: hidden;
+      font-family: sans-serif;
     }
     #container {
       width: 100vw;
@@ -19,7 +20,7 @@
       top: 20px;
       left: 20px;
       z-index: 100;
-      padding: 12px 24px;
+      padding: 14px 28px;
       background: #ff2a5f;
       color: white;
       border: none;
@@ -27,6 +28,7 @@
       font-size: 16px;
       font-weight: bold;
       cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
   </style>
 
@@ -50,15 +52,15 @@
     import { MindARThree } from 'mindar-image-three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    // 1. Initialize MindAR
+    // 1. Initialize MindAR Engine
     const mindarThree = new MindARThree({
       container: document.querySelector('#container'),
-      imageTargetSrc: './targets.mind',
+      imageTargetSrc: './targets.mind', // Path to your targets.mind file
     });
 
     const { renderer, scene, camera } = mindarThree;
 
-    // 2. Add Lights
+    // 2. Setup Ambient and Directional Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
     scene.add(ambientLight);
 
@@ -66,33 +68,61 @@
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
 
-    // 3. Set Up Target Anchor
+    // 3. Set Up Target Anchor (Index 0)
     const anchor = mindarThree.addAnchor(0);
 
-    // 4. Load your thar.glb model
+    // --- FALLBACK VISUAL HELPER ---
+    // A red cube to confirm image target tracking works instantly
+    const testCubeGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const testCubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const testCube = new THREE.Mesh(testCubeGeometry, testCubeMaterial);
+    testCube.position.set(0, 0, 0.1);
+    anchor.group.add(testCube);
+
+    // 4. Load & Auto-Fit thar.glb
     const loader = new GLTFLoader();
     
     loader.load(
       './thar.glb', 
       (gltf) => {
         const model = gltf.scene;
-        
-        // Adjust scale and orientation if needed
-        model.scale.set(0.2, 0.2, 0.2); 
-        model.rotation.x = Math.PI / 2; 
 
+        // Auto-center geometry around origin
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        model.position.x += (model.position.x - center.x);
+        model.position.y += (model.position.y - center.y);
+        model.position.z += (model.position.z - center.z);
+
+        // Auto-scale model to fit on top of target image
+        const maxDim = Math.max(size.x, size.y, size.z);
+        if (maxDim > 0) {
+          const scale = 1.0 / maxDim;
+          model.scale.set(scale, scale, scale);
+        }
+
+        // Adjust rotation (Vehicle sitting flat on image)
+        model.rotation.x = Math.PI / 2;
+
+        // Hide fallback cube once 3D model is ready
+        anchor.group.remove(testCube);
         anchor.group.add(model);
-        console.log('Thar GLB loaded successfully!');
+        
+        console.log('Thar GLB loaded and rendered successfully!');
       },
       (progress) => {
-        console.log(`Loading GLB: ${(progress.loaded / progress.total * 100).toFixed(0)}%`);
+        if (progress.total > 0) {
+          console.log(`Loading GLB: ${(progress.loaded / progress.total * 100).toFixed(0)}%`);
+        }
       },
       (error) => {
-        console.error('Error loading thar.glb model:', error);
+        console.error('Error loading thar.glb:', error);
       }
     );
 
-    // 5. Start Engine on User Click
+    // 5. Trigger Camera Engine on User Click
     const startBtn = document.querySelector('#startButton');
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
@@ -100,6 +130,11 @@
       await mindarThree.start();
 
       renderer.setAnimationLoop(() => {
+        // Spin the test cube if model hasn't loaded yet
+        if (testCube.parent) {
+          testCube.rotation.x += 0.01;
+          testCube.rotation.y += 0.01;
+        }
         renderer.render(scene, camera);
       });
     });
