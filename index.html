@@ -51,16 +51,22 @@
     import * as THREE from 'three';
     import { MindARThree } from 'mindar-image-three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'; // 1. Import DRACOLoader
 
     // 1. Initialize MindAR Engine
     const mindarThree = new MindARThree({
       container: document.querySelector('#container'),
-      imageTargetSrc: './targets.mind', // Path to your targets.mind file
+      imageTargetSrc: './targets.mind',
     });
 
     const { renderer, scene, camera } = mindarThree;
 
-    // 2. Setup Ambient and Directional Lighting
+    // Suppress Three.js color space warning for cleaner console
+    if (renderer) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+
+    // 2. Setup Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
     scene.add(ambientLight);
 
@@ -71,23 +77,27 @@
     // 3. Set Up Target Anchor (Index 0)
     const anchor = mindarThree.addAnchor(0);
 
-    // --- FALLBACK VISUAL HELPER ---
-    // A red cube to confirm image target tracking works instantly
+    // --- FALLBACK RED CUBE HELPER ---
     const testCubeGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
     const testCubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const testCube = new THREE.Mesh(testCubeGeometry, testCubeMaterial);
     testCube.position.set(0, 0, 0.1);
     anchor.group.add(testCube);
 
-    // 4. Load & Auto-Fit thar.glb
+    // 4. Configure Draco Decoder & GLTF Loader
+    const dracoLoader = new DRACOLoader(); // 2. Instantiate DRACOLoader
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); // Set decoder CDN path
+
     const loader = new GLTFLoader();
-    
+    loader.setDRACOLoader(dracoLoader); // 3. Attach DRACOLoader to GLTFLoader
+
+    // 5. Load & Auto-Fit thar.glb
     loader.load(
-      './assets/thar.glb', 
+      './thar.glb?v=5', 
       (gltf) => {
         const model = gltf.scene;
 
-        // Auto-center geometry around origin
+        // Auto-center geometry
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
@@ -96,21 +106,20 @@
         model.position.y += (model.position.y - center.y);
         model.position.z += (model.position.z - center.z);
 
-        // Auto-scale model to fit on top of target image
+        // Auto-scale model
         const maxDim = Math.max(size.x, size.y, size.z);
         if (maxDim > 0) {
           const scale = 1.0 / maxDim;
           model.scale.set(scale, scale, scale);
         }
 
-        // Adjust rotation (Vehicle sitting flat on image)
-        model.rotation.x = Math.PI / 2;
+        model.rotation.x = Math.PI / 2; // Flat on physical image
 
         // Hide fallback cube once 3D model is ready
         anchor.group.remove(testCube);
         anchor.group.add(model);
         
-        console.log('Thar GLB loaded and rendered successfully!');
+        console.log('Thar GLB decoded and loaded successfully!');
       },
       (progress) => {
         if (progress.total > 0) {
@@ -122,7 +131,7 @@
       }
     );
 
-    // 5. Trigger Camera Engine on User Click
+    // 6. Trigger Camera Engine on User Click
     const startBtn = document.querySelector('#startButton');
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
@@ -130,7 +139,6 @@
       await mindarThree.start();
 
       renderer.setAnimationLoop(() => {
-        // Spin the test cube if model hasn't loaded yet
         if (testCube.parent) {
           testCube.rotation.x += 0.01;
           testCube.rotation.y += 0.01;
